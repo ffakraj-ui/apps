@@ -183,14 +183,17 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
-
 def get_video_info(youtube_url):
     """Extract video URL and title from YouTube"""
     ydl_opts = {
-        'format': 'best[height<=720]',  # 720p best quality
+        'format': 'best[height<=720]',
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'sleep_interval': 3,  # Har request ke beech 3 second ka gap
+        'max_sleep_interval': 5,
+        'sleep_interval_requests': 2,
     }
     
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
