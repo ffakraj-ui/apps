@@ -35,7 +35,6 @@ HTML_TEMPLATE = '''
             padding: 30px;
             box-shadow: 0 25px 50px rgba(0,0,0,0.5);
             backdrop-filter: blur(10px);
-            transition: transform 0.3s;
         }
 
         h1 {
@@ -46,7 +45,6 @@ HTML_TEMPLATE = '''
             -webkit-text-fill-color: transparent;
             background-clip: text;
             font-size: 32px;
-            letter-spacing: 1px;
         }
 
         .input-group {
@@ -65,7 +63,6 @@ HTML_TEMPLATE = '''
             background: #2a2a2a;
             color: white;
             outline: none;
-            transition: 0.2s;
         }
 
         .url-input:focus {
@@ -98,7 +95,6 @@ HTML_TEMPLATE = '''
             width: 100%;
             border-radius: 16px;
             background: black;
-            outline: none;
         }
 
         .video-title {
@@ -106,7 +102,6 @@ HTML_TEMPLATE = '''
             text-align: center;
             margin-top: 15px;
             font-size: 18px;
-            word-break: break-word;
         }
 
         .loading, .error {
@@ -129,11 +124,11 @@ HTML_TEMPLATE = '''
         <h1>🎬 CUSTOM YOUTUBE PLAYER</h1>
         
         <div class="input-group">
-            <input type="text" id="youtubeUrl" class="url-input" placeholder="Paste YouTube URL here... (e.g., https://youtu.be/... or https://youtube.com/...)">
+            <input type="text" id="youtubeUrl" class="url-input" placeholder="Paste YouTube URL here...">
             <button class="load-btn" onclick="loadVideo()">▶ LOAD & PLAY</button>
         </div>
         
-        <div id="loading" class="loading" style="display:none;">Fetching video... Please wait ⏳</div>
+        <div id="loading" class="loading" style="display:none;">Loading video... Please wait ⏳</div>
         <div id="error" class="error"></div>
         
         <div id="videoContainer" style="display:none;">
@@ -175,7 +170,6 @@ HTML_TEMPLATE = '''
             }
         }
         
-        // Enter key support
         document.getElementById('youtubeUrl').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') loadVideo();
         });
@@ -183,18 +177,19 @@ HTML_TEMPLATE = '''
 </body>
 </html>
 '''
+
 def get_video_info(youtube_url):
     """Extract video URL and title from YouTube"""
     ydl_opts = {
         'format': 'best[height<=720]',
         'quiet': True,
         'no_warnings': True,
-        'extract_flat': False,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'sleep_interval': 3,  # Har request ke beech 3 second ka gap
-        'max_sleep_interval': 5,
-        'sleep_interval_requests': 2,
     }
+    
+    # Agar cookies.txt file exist karti hai to use karo
+    if os.path.exists('cookies.txt'):
+        ydl_opts['cookiefile'] = 'cookies.txt'
     
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(youtube_url, download=False)
@@ -210,7 +205,6 @@ def get_video():
     if not url:
         return {'error': 'No URL provided'}, 400
     
-    # Simple YouTube URL validation
     if 'youtube.com' not in url and 'youtu.be' not in url:
         return {'error': 'Only YouTube URLs are supported'}, 400
     
