@@ -1,7 +1,7 @@
 from flask import Flask, request, render_template_string
-import requests
-import re
+import yt_dlp as youtube_dl
 import os
+import re
 
 app = Flask(__name__)
 
@@ -122,17 +122,39 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-def get_video_id(url):
-    """Extract video ID from YouTube URL"""
-    patterns = [
-        r'(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})',
-        r'(?:youtu\.be\/)([a-zA-Z0-9_-]{11})'
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
+def get_video_info(youtube_url):
+    """Extract video URL and title from YouTube using mobile client (bypasses bot block)"""
+    ydl_opts = {
+        'format': 'best[height<=720]',
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],  # Android client pehle try karo
+                'skip': ['dash', 'hls'],  # HLS/DASH skip karoge toh direct URL milta hai
+            }
+        },
+        'user_agent': 'Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36'
+    }
+    
+    try:
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(youtube_url, download=False)
+            video_url = info.get('url')
+            title = info.get('title', 'Video')
+            
+            # Agar direct URL nahi mila toh formats mein dhundho
+            if not video_url and 'formats' in info:
+                for f in info['formats']:
+                    if f.get('height') and int(f.get('height', 0)) <= 720 and f.get('ext') == 'mp4':
+                        video_url = f.get('url')
+                        if video_url:
+                            break
+            
+            return video_url, title
+    except Exception as e:
+        raise Exception(f"yt-dlp error: {str(e)}")
 
 @app.route('/')
 def index():
@@ -144,24 +166,14 @@ def get_video():
     if not url:
         return {'error': 'No URL provided'}, 400
     
-    video_id = get_video_id(url)
-    if not video_id:
-        return {'error': 'Invalid YouTube URL'}, 400
+    if 'youtube.com' not in url and 'youtu.be' not in url:
+        return {'error': 'Only YouTube URLs are supported'}, 400
     
-    # Piped API se video stream URL lete hain
     try:
-        # Piped ka public instance
-        api_url = f'https://pipedapi.kavin.rocks/streams/{video_id}'
-        response = requests.get(api_url, timeout=10)
-        data = response.json()
-        
-        if 'videoStreams' in data and len(data['videoStreams']) > 0:
-            # Best quality stream lelo (usually last wala best hota hai)
-            video_url = data['videoStreams'][-1]['url']
-            title = data.get('title', 'Video')
-            return {'video_url': video_url, 'title': title}
-        else:
-            return {'error': 'No video streams found'}, 500
+        video_url, title = get_video_info(url)
+        if not video_url:
+            return {'error': 'Could not extract video URL'}, 500
+        return {'video_url': video_url, 'title': title}
     except Exception as e:
         return {'error': str(e)}, 500
 
