@@ -1,5 +1,6 @@
 from flask import Flask, request, render_template_string
-import yt_dlp as youtube_dl
+import requests
+import re
 import os
 
 app = Flask(__name__)
@@ -11,22 +12,16 @@ HTML_TEMPLATE = '''
     <title>Custom YouTube Player</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             padding: 20px;
         }
-
         .player-card {
             max-width: 1000px;
             width: 100%;
@@ -34,26 +29,21 @@ HTML_TEMPLATE = '''
             border-radius: 24px;
             padding: 30px;
             box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px);
         }
-
         h1 {
             text-align: center;
             margin-bottom: 25px;
             background: linear-gradient(135deg, #ff6a00, #ee0979);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            background-clip: text;
             font-size: 32px;
         }
-
         .input-group {
             display: flex;
             gap: 12px;
             margin-bottom: 30px;
             flex-wrap: wrap;
         }
-
         .url-input {
             flex: 1;
             padding: 14px 18px;
@@ -64,12 +54,6 @@ HTML_TEMPLATE = '''
             color: white;
             outline: none;
         }
-
-        .url-input:focus {
-            background: #3a3a3a;
-            box-shadow: 0 0 0 2px #ff6a00;
-        }
-
         .load-btn {
             padding: 14px 28px;
             background: #ff6a00;
@@ -77,99 +61,59 @@ HTML_TEMPLATE = '''
             border-radius: 50px;
             color: white;
             font-weight: bold;
-            font-size: 16px;
             cursor: pointer;
-            transition: all 0.3s;
         }
-
-        .load-btn:hover {
-            background: #ee0979;
-            transform: scale(1.02);
-        }
-
-        .video-container {
-            margin-top: 20px;
-        }
-
         video {
             width: 100%;
             border-radius: 16px;
-            background: black;
+            margin-top: 20px;
         }
-
         .video-title {
             color: white;
             text-align: center;
             margin-top: 15px;
-            font-size: 18px;
         }
-
-        .loading, .error {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 16px;
-        }
-
-        .loading {
-            color: #ffaa00;
-        }
-
-        .error {
-            color: #ff4444;
-        }
+        .error { color: #ff4444; text-align: center; margin-top: 20px; }
+        .loading { color: #ffaa00; text-align: center; margin-top: 20px; }
     </style>
 </head>
 <body>
     <div class="player-card">
         <h1>🎬 CUSTOM YOUTUBE PLAYER</h1>
-        
         <div class="input-group">
             <input type="text" id="youtubeUrl" class="url-input" placeholder="Paste YouTube URL here...">
             <button class="load-btn" onclick="loadVideo()">▶ LOAD & PLAY</button>
         </div>
-        
         <div id="loading" class="loading" style="display:none;">Loading video... Please wait ⏳</div>
         <div id="error" class="error"></div>
-        
         <div id="videoContainer" style="display:none;">
-            <div class="video-container">
-                <video id="myPlayer" controls autoplay></video>
-            </div>
+            <video id="myPlayer" controls autoplay></video>
             <div id="videoTitle" class="video-title"></div>
         </div>
     </div>
-
     <script>
         async function loadVideo() {
             let url = document.getElementById('youtubeUrl').value.trim();
-            if (!url) {
-                alert('Please enter a YouTube URL first!');
-                return;
-            }
-            
+            if (!url) { alert('Please enter a YouTube URL!'); return; }
             document.getElementById('loading').style.display = 'block';
             document.getElementById('error').innerHTML = '';
             document.getElementById('videoContainer').style.display = 'none';
-            
             try {
                 let response = await fetch('/get_video?url=' + encodeURIComponent(url));
                 let data = await response.json();
-                
                 if (data.error) {
                     document.getElementById('error').innerHTML = '❌ ' + data.error;
                 } else {
-                    let video = document.getElementById('myPlayer');
-                    video.src = data.video_url;
+                    document.getElementById('myPlayer').src = data.video_url;
                     document.getElementById('videoTitle').innerHTML = '🎵 ' + data.title;
                     document.getElementById('videoContainer').style.display = 'block';
                 }
             } catch(e) {
-                document.getElementById('error').innerHTML = '❌ Network error: ' + e.message;
+                document.getElementById('error').innerHTML = '❌ Network error';
             } finally {
                 document.getElementById('loading').style.display = 'none';
             }
         }
-        
         document.getElementById('youtubeUrl').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') loadVideo();
         });
@@ -178,22 +122,17 @@ HTML_TEMPLATE = '''
 </html>
 '''
 
-def get_video_info(youtube_url):
-    """Extract video URL and title from YouTube"""
-    ydl_opts = {
-        'format': 'best[height<=720]',
-        'quiet': True,
-        'no_warnings': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    }
-    
-    # Agar cookies.txt file exist karti hai to use karo
-    if os.path.exists('cookies.txt'):
-        ydl_opts['cookiefile'] = 'cookies.txt'
-    
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(youtube_url, download=False)
-        return info.get('url'), info.get('title')
+def get_video_id(url):
+    """Extract video ID from YouTube URL"""
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})',
+        r'(?:youtu\.be\/)([a-zA-Z0-9_-]{11})'
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return None
 
 @app.route('/')
 def index():
@@ -205,17 +144,24 @@ def get_video():
     if not url:
         return {'error': 'No URL provided'}, 400
     
-    if 'youtube.com' not in url and 'youtu.be' not in url:
-        return {'error': 'Only YouTube URLs are supported'}, 400
+    video_id = get_video_id(url)
+    if not video_id:
+        return {'error': 'Invalid YouTube URL'}, 400
     
+    # Piped API se video stream URL lete hain
     try:
-        video_url, title = get_video_info(url)
-        if not video_url:
-            return {'error': 'Could not extract video URL'}, 500
-        return {
-            'video_url': video_url,
-            'title': title
-        }
+        # Piped ka public instance
+        api_url = f'https://pipedapi.kavin.rocks/streams/{video_id}'
+        response = requests.get(api_url, timeout=10)
+        data = response.json()
+        
+        if 'videoStreams' in data and len(data['videoStreams']) > 0:
+            # Best quality stream lelo (usually last wala best hota hai)
+            video_url = data['videoStreams'][-1]['url']
+            title = data.get('title', 'Video')
+            return {'video_url': video_url, 'title': title}
+        else:
+            return {'error': 'No video streams found'}, 500
     except Exception as e:
         return {'error': str(e)}, 500
 
